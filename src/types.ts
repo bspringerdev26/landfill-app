@@ -114,3 +114,15 @@ export interface ServiceEvent {
   // REAL timestamp for the completed service
   occurredAt: ISODateString;
 }
+
+// This is the Session export interface that session.ts was looking for.
+export interface Session {
+  employeeId: string;
+  name: string;
+  role: Role;
+
+  truckNumber?: string;
+
+  startedAt: ISODateString;
+  endedAt?: ISODateString;
+}
