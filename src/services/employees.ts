@@ -72,12 +72,19 @@ export async function verifyEmployeePin(employeeId: string, pin: string) {
     return { ok: false as const, reason: "Invalid PIN." };
   }
 
-  // Update last login timestamp (nice for admin auditing)
-  await updateDoc(ref, {
-    lastLoginAt: nowIso(),
-    updatedAt: nowIso(),
-    updatedAtServer: serverTimestamp(),
-  });
+    // Optional audit logging:
+  // We are NOT writing on login yet because Firestore rules currently deny writes.
+  // We'll re-enable this once we add real auth / role-based writes.
+  try {
+    // await updateDoc(ref, {
+    //   lastLoginAt: nowIso(),
+    //   updatedAt: nowIso(),
+    //   updatedAtServer: serverTimestamp(),
+    // });
+  } catch {
+    // ignore
+  }
+
 
   return {
     ok: true as const,

@@ -7,6 +7,21 @@ export type Role = "admin" | "driver" | "dispatch";
 
 // --- Container classifications (two different worlds) ---
 
+// src/types.ts
+
+// Routes in your system
+export type RouteId = "route_a" | "route_b" | "route_c" | "route_d" | "route_e";
+
+// Dispatch/Driver container kinds (NOT the admin 20/25/30 yard sizes)
+export type ContainerKind =
+  | "compactor"
+  | "brown_goods"
+  | "plastic"
+  | "plastic_compactor"
+  | "cardboard"
+  | "metal";
+
+
 // 1) What Dispatch/Driver care about (material / can type)
 export type MaterialContainerType =
   | "compactor"

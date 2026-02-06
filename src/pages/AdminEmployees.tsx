@@ -22,6 +22,11 @@ type EmployeeRow = {
   role: Role;
 };
 
+function toErrorMessage(err: unknown) {
+  if (err instanceof Error) return err.message;
+  return "Something went wrong.";
+}
+
 export default function AdminEmployees() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<EmployeeRow[]>([]);
@@ -47,7 +52,7 @@ export default function AdminEmployees() {
       const list = await listEmployeesForLogin();
       setRows(list.map((e) => ({ id: e.id, name: e.name, role: e.role })));
       if (!pinEmployeeId && list.length) setPinEmployeeId(list[0].id);
-    } catch (err) {
+    } catch {
       setMessage("Failed to load employees.");
     } finally {
       setLoading(false);
@@ -80,9 +85,10 @@ export default function AdminEmployees() {
       setNewId("");
       setNewName("");
       await refresh();
-    } catch (err: any) {
-      setMessage(err?.message || "Failed to create employee.");
-    }
+    } catch (err: unknown) {
+  setMessage(toErrorMessage(err) || "Failed to create employee.");
+}
+
   }
 
   async function handleSetPin() {
@@ -104,9 +110,10 @@ export default function AdminEmployees() {
       setMessage("PIN updated.");
       setPinValue("");
       await refresh();
-    } catch (err: any) {
-      setMessage(err?.message || "Failed to set PIN.");
-    }
+    } catch (err: unknown) {
+  setMessage(toErrorMessage(err) || "Failed to set PIN.");
+}
+
   }
 
   return (
