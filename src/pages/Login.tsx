@@ -2,7 +2,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listEmployeesForLogin, normalizePin, verifyEmployeePin } from "../services/employees";
-import { startSession } from "../services/session";
+import { saveSession } from "../services/session";
+
+
 
 type Option = {
   id: string;
@@ -97,11 +99,13 @@ export default function Login() {
 
       const emp = result.employee;
 
-      startSession({
-        employeeId: emp.id,
-        name: emp.name,
-        role: emp.role,
-      });
+      saveSession({
+  employeeId: emp.id,
+  name: emp.name,
+  role: emp.role,
+  loginAt: new Date().toISOString(),
+});
+
 
       navigate(routeForRole(emp.role), { replace: true });
     } catch (err: unknown) {

@@ -7,6 +7,9 @@ import {
   normalizePin,
   setEmployeePin,
 } from "../services/employees";
+import { useNavigate } from "react-router-dom";
+import { clearSession } from "../services/session";
+
 
 function sanitizeEmployeeId(raw: string) {
   return raw
@@ -28,6 +31,13 @@ function toErrorMessage(err: unknown) {
 }
 
 export default function AdminEmployees() {
+  const navigate = useNavigate();
+
+function logout() {
+  clearSession();
+  navigate("/");
+}
+
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<EmployeeRow[]>([]);
   const [message, setMessage] = useState<string>("");
@@ -58,6 +68,7 @@ export default function AdminEmployees() {
       setLoading(false);
     }
   }
+
 
   useEffect(() => {
     refresh();
@@ -118,7 +129,25 @@ export default function AdminEmployees() {
 
   return (
     <div style={{ maxWidth: 900, margin: "40px auto", padding: 16 }}>
-      <h2 style={{ marginTop: 0 }}>Admin: Employees</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+  <h2 style={{ marginTop: 0, marginBottom: 0 }}>Admin: Employees</h2>
+
+  <button
+    onClick={logout}
+    style={{
+      padding: "10px 12px",
+      borderRadius: 12,
+      border: "1px solid #ccc",
+      background: "transparent",
+      cursor: "pointer",
+      fontWeight: 800,
+      whiteSpace: "nowrap",
+    }}
+  >
+    Logout
+  </button>
+</div>
+
       <p style={{ opacity: 0.75, marginTop: 6 }}>
         Create employees and set their 4-digit PINs.
       </p>
