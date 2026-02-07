@@ -1,27 +1,21 @@
 // src/services/firebase.ts
-// Firebase client initialization for the Vite app.
-
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-
-// NOTE: For a prototype, it's okay to keep config here.
-// Later we'll move these to .env and use import.meta.env.
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDMV75nPaYKrzFqlDo0xiFKX1_8x0ze9FM",
-  authDomain: "landfill-app.firebaseapp.com",
-  projectId: "landfill-app",
-  storageBucket: "landfill-app.firebasestorage.app",
-  messagingSenderId: "14633967919",
-  appId: "1:14633967919:web:8abad8528bcf758f7e01da"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID as string,
 };
 
+// Prevent double-initializing during Vite hot reload
+const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
-export const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
 export const db = getFirestore(app);
-
-// Real timestamps, easy to store + display + export
-export function nowIso() {
-  return new Date().toISOString();
-}
-
+export const functions = getFunctions(app);

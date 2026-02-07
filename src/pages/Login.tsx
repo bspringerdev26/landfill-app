@@ -1,20 +1,35 @@
 // src/pages/Login.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listEmployeesForLogin, normalizePin, verifyEmployeePin } from "../services/employees";
-import { saveSession } from "../services/session";
+import { httpsCallable } from "firebase/functions";
+import { signInWithCustomToken } from "firebase/auth";
 
+import { auth, functions } from "../services/firebase";
+import type { Role } from "../types";
+import { normalizePin } from "../services/employees";
+import { startSession } from "../services/session";
 
-
-type Option = {
+type LoginEmployee = {
   id: string;
   name: string;
-  role: "admin" | "driver" | "dispatch";
+  role: Role;
+  isActive: true;
 };
 
-function getErrorMessage(err: unknown) {
+type ListEmployeesResult = { employees: LoginEmployee[] };
+type LoginWithPinResult = {
+  token: string;
+  user: { employeeId: string; name: string; role: Role };
+};
+
+function routeForRole(role: Role) {
+  if (role === "admin" || role === "owner") return "/admin";
+  if (role === "dispatch") return "/dispatch";
+  return "/driver";
+}
+
+function toErrorMessage(err: unknown) {
   if (err instanceof Error) return err.message;
-  if (typeof err === "string") return err;
   return "Something went wrong.";
 }
 
@@ -22,185 +37,166 @@ export default function Login() {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
-  const [options, setOptions] = useState<Option[]>([]);
-  const [selectedId, setSelectedId] = useState<string>("");
+  const [employees, setEmployees] = useState<LoginEmployee[]>([]);
+  const [employeeId, setEmployeeId] = useState("");
   const [pin, setPin] = useState("");
-  const [error, setError] = useState<string>("");
+  const [message, setMessage] = useState("");
 
-  const selected = useMemo(
-    () => options.find((o) => o.id === selectedId) || null,
-    [options, selectedId]
+  const sorted = useMemo(
+    () => [...employees].sort((a, b) => a.name.localeCompare(b.name)),
+    [employees]
   );
 
   useEffect(() => {
-    let alive = true;
-
-    (async () => {
+    async function load() {
       setLoading(true);
-      setError("");
-
+      setMessage("");
       try {
-        const list = await listEmployeesForLogin();
-        if (!alive) return;
+        const fn = httpsCallable<unknown, ListEmployeesResult>(
+          functions,
+          "listEmployeesForLogin"
+        );
+        const res = await fn();
+        const list = res.data?.employees ?? [];
+        setEmployees(list);
 
-        const mapped: Option[] = list.map((e) => ({
-          id: e.id,
-          name: e.name,
-          role: e.role,
-        }));
-
-        setOptions(mapped);
-
-        if (mapped.length && !selectedId) {
-          setSelectedId(mapped[0].id);
-        }
-      } catch (err: unknown) {
-        if (!alive) return;
-        setError(getErrorMessage(err) || "Failed to load employees.");
+        // pick first employee by default to keep it fast
+        if (list.length && !employeeId) setEmployeeId(list[0].id);
+      } catch (err) {
+        setMessage(`Failed to load employees: ${toErrorMessage(err)}`);
+      } finally {
+        setLoading(false);
       }
+    }
 
-      if (!alive) return;
-      setLoading(false);
-    })();
-
-    return () => {
-      alive = false;
-    };
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function routeForRole(role: Option["role"]) {
-    if (role === "admin") return "/admin";
-    if (role === "dispatch") return "/dispatch";
-    return "/driver";
-  }
-
   async function handleLogin() {
-    setError("");
+    setMessage("");
 
-    if (!selectedId) {
-      setError("Pick your name from the dropdown.");
+    if (!employeeId) {
+      setMessage("Pick your name.");
       return;
     }
 
-    const cleanedPin = normalizePin(pin);
-    if (cleanedPin.length !== 4) {
-      setError("PIN must be exactly 4 digits.");
+    const cleaned = normalizePin(pin);
+    if (cleaned.length !== 4) {
+      setMessage("PIN must be exactly 4 digits.");
       return;
     }
 
     try {
-      const result = await verifyEmployeePin(selectedId, cleanedPin);
+      setLoading(true);
 
-      if (!result.ok) {
-        setError(result.reason);
-        return;
-      }
+      // 1) Call Cloud Function to validate PIN + return custom token
+      const loginFn = httpsCallable<
+        { employeeId: string; pin: string },
+        LoginWithPinResult
+      >(functions, "loginWithPin");
 
-      const emp = result.employee;
+      const res = await loginFn({ employeeId, pin: cleaned });
+      const token = res.data.token;
+      const user = res.data.user;
 
-      saveSession({
-  employeeId: emp.id,
-  name: emp.name,
-  role: emp.role,
-  loginAt: new Date().toISOString(),
-});
+      // 2) Sign into Firebase Auth with the custom token
+      await signInWithCustomToken(auth, token);
 
+      // 3) Store local session for routing/UI
+      startSession({
+        employeeId: user.employeeId,
+        name: user.name,
+        role: user.role,
+        startedAt: new Date().toISOString(),
+      });
 
-      navigate(routeForRole(emp.role), { replace: true });
-    } catch (err: unknown) {
-      setError(getErrorMessage(err) || "Login failed.");
+      // 4) Go to the right view
+      navigate(routeForRole(user.role), { replace: true });
+    } catch (err) {
+      setMessage(toErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <div style={{ maxWidth: 480, margin: "56px auto", padding: 16 }}>
-      <h1 style={{ margin: 0, fontSize: 28 }}>Landfill Pickup App</h1>
-      <p style={{ marginTop: 8, opacity: 0.75 }}>
-        Select your name, enter your 4-digit PIN, and try not to break anything.
-      </p>
+    <div style={{ maxWidth: 420, margin: "40px auto", padding: 16 }}>
+      <h2 style={{ marginBottom: 8, marginTop: 0 }}>Landfill Login</h2>
+      <div style={{ opacity: 0.75, marginBottom: 14 }}>
+        Select your name and enter your 4-digit PIN.
+      </div>
 
-      <div style={{ marginTop: 18 }}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 700 }}>
-          Employee
-        </label>
+      <label style={{ fontWeight: 700, display: "block", marginBottom: 6 }}>
+        Employee
+      </label>
+      <select
+        value={employeeId}
+        onChange={(e) => setEmployeeId(e.target.value)}
+        disabled={loading}
+        style={{
+          width: "100%",
+          padding: 12,
+          borderRadius: 10,
+          border: "1px solid #ccc",
+          marginBottom: 12,
+          fontSize: 16,
+        }}
+      >
+        {sorted.map((e) => (
+          <option key={e.id} value={e.id}>
+            {e.name} ({e.id})
+          </option>
+        ))}
+      </select>
 
-        <select
-          value={selectedId}
-          onChange={(e) => setSelectedId(e.target.value)}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: 12,
-            borderRadius: 10,
-            border: "1px solid #ccc",
-            fontSize: 16,
-          }}
-        >
-          {loading ? (
-            <option value="">Loading…</option>
-          ) : options.length ? (
-            options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name} ({o.id})
-              </option>
-            ))
-          ) : (
-            <option value="">No active employees found</option>
-          )}
-        </select>
+      <label style={{ fontWeight: 700, display: "block", marginBottom: 6 }}>
+        PIN
+      </label>
+      <input
+        type="password"
+        inputMode="numeric"
+        placeholder="0000"
+        value={pin}
+        disabled={loading}
+        onChange={(e) => setPin(normalizePin(e.target.value))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleLogin();
+        }}
+        style={{
+          width: "100%",
+          padding: 12,
+          borderRadius: 10,
+          border: "1px solid #ccc",
+          marginBottom: 12,
+          fontSize: 16,
+        }}
+      />
 
-        <div style={{ marginTop: 14 }}>
-          <label style={{ display: "block", marginBottom: 6, fontWeight: 700 }}>
-            PIN
-          </label>
+      <button
+        onClick={handleLogin}
+        disabled={loading || !employees.length}
+        style={{
+          width: "100%",
+          padding: 12,
+          borderRadius: 10,
+          border: 0,
+          cursor: "pointer",
+          fontSize: 16,
+          fontWeight: 800,
+        }}
+      >
+        {loading ? "Loading…" : "Login"}
+      </button>
 
-          <input
-            type="password"
-            inputMode="numeric"
-            value={pin}
-            onChange={(e) => setPin(normalizePin(e.target.value))}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleLogin();
-            }}
-            placeholder="4-digit PIN"
-            style={{
-              width: "100%",
-              padding: 12,
-              borderRadius: 10,
-              border: "1px solid #ccc",
-              fontSize: 16,
-              letterSpacing: 6,
-            }}
-          />
+      {message && (
+        <div style={{ marginTop: 12, color: "crimson", fontWeight: 700 }}>
+          {message}
         </div>
+      )}
 
-        <button
-          onClick={handleLogin}
-          disabled={loading || !selected || options.length === 0}
-          style={{
-            width: "100%",
-            marginTop: 16,
-            padding: 12,
-            borderRadius: 10,
-            border: 0,
-            cursor: loading ? "not-allowed" : "pointer",
-            fontSize: 16,
-            fontWeight: 800,
-          }}
-        >
-          Login
-        </button>
-
-        {error && (
-          <div style={{ marginTop: 12, color: "crimson", fontWeight: 700 }}>
-            {error}
-          </div>
-        )}
-
-        <div style={{ marginTop: 18, fontSize: 12, opacity: 0.7 }}>
-          Prototype login only. Real security comes from Firebase rules.
-        </div>
+      <div style={{ marginTop: 14, fontSize: 12, opacity: 0.7 }}>
+        Security note: PIN verification is server-side via Cloud Functions.
       </div>
     </div>
   );

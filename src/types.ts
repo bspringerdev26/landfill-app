@@ -3,7 +3,8 @@
 // This file has NO Firebase code. Just types and shared constants.
 
 // --- Roles ---
-export type Role = "admin" | "driver" | "dispatch";
+export type Role = "owner" | "admin" | "dispatch" | "driver";
+
 
 // --- Container classifications (two different worlds) ---
 
